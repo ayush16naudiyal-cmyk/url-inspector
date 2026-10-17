@@ -4,8 +4,7 @@ URL Inspector shows what really happens when a URL is requested. You give it a U
 
 **Live demo:** https://url-inspector-12i9.onrender.com (free tier, so the first load after a quiet spell can take up to a minute)
 
-![Screenshot of URL Inspector](docs/screenshot.png)
-<!-- Placeholder: save a screenshot as docs/screenshot.png -->
+![URL Inspector showing the timing waterfall for github.com](docs/screenshot.jpg)
 
 ## Features
 
