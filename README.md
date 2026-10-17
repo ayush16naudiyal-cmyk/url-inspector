@@ -2,7 +2,7 @@
 
 URL Inspector shows what really happens when a URL is requested. You give it a URL, and the server makes the request itself using Node's low-level `dns`, `net`, `tls`, `http` and `https` modules. It measures each phase (DNS lookup, TCP connect, TLS handshake, time to first byte and content download), follows the redirect chain hop by hop, reads the TLS certificate, and grades the response's security headers with a plain-English explanation of each one. The frontend is plain HTML, CSS and JavaScript with direct DOM manipulation. There is no framework and no build step.
 
-**Live demo:** _coming soon (add your Render URL here)_
+**Live demo:** https://url-inspector-12i9.onrender.com (free tier, so the first load after a quiet spell can take up to a minute)
 
 ![Screenshot of URL Inspector](docs/screenshot.png)
 <!-- Placeholder: save a screenshot as docs/screenshot.png -->
@@ -131,7 +131,7 @@ A server that fetches any URL a user types can be turned against the network it 
 - **Re-check on every redirect.** A public URL can redirect to `http://127.0.0.1/`, so the check runs again for each hop.
 - **DNS rebinding protection.** The request is given a custom `lookup` function that returns the IP we already checked, so a second DNS answer cannot swap in an internal address. The original hostname is still sent in the `Host` header and as the TLS SNI `servername`.
 - **XSS-safe rendering.** Header values come from external sites. The frontend builds every element with `document.createElement` and sets text with `textContent`, never `innerHTML`.
-- **Rate limit.** 20 requests per minute per IP on `/api/inspect` (`express-rate-limit`). `trust proxy` is set to 1, so the real client IP is used behind Render's proxy.
+- **Rate limit.** 20 requests per minute per IP on `/api/inspect` (`express-rate-limit`). `trust proxy` is set to 3, the number of proxies measured in front of the app on Render (Cloudflare → Render load balancer → local proxy), so `req.ip` is the real client IP and can't be spoofed with a fake `X-Forwarded-For`.
 - **Timeout.** The whole inspection, across all hops, has a 10-second deadline. On timeout the open socket is destroyed.
 - **Body cap.** At most 1 MB of the body is read, and it is counted, not stored.
 - `ALLOW_PRIVATE_HOSTS=true` turns the IP check off. It exists **only for tests** that talk to a local server. **Never set it in production.**
@@ -176,4 +176,4 @@ This runs as **one Render Web Service**: Express serves both the API and `public
 - Requests an uncompressed body (`Accept-Encoding: identity`), so body size is the uncompressed size.
 - Only `GET` requests. No cookies, so sites that need login or a cookie banner may show a different page.
 - The rate limit is stored in memory, so it resets on restart and is not shared across several instances.
-- `trust proxy` is set to 1 hop. If your host puts more proxies in front of the app, adjust it.
+- `trust proxy` is set to 3 hops to match Render. On another host (or if Render changes its setup), check the `X-Forwarded-For` chain and adjust the number.

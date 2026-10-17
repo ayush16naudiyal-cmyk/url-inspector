@@ -10,16 +10,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-// On Render, every request reaches us through one proxy, so req.ip would be
-// the proxy's address and ALL users would share one rate limit. Trusting one
-// proxy hop makes Express read the real client IP from X-Forwarded-For.
-app.set('trust proxy', 1);
+// Behind proxies, req.socket's address is the proxy's, not the user's, so ALL
+// users would share one rate limit. Each proxy appends the address it got the
+// request from to X-Forwarded-For. On Render we measured three hops:
+//   X-Forwarded-For: <client>, <Cloudflare edge>, <Render load balancer>
+//   socket address:  ::1 (a local proxy in front of our app)
+// Trusting exactly 3 hops makes req.ip the real client. We don't trust more,
+// because anything further left can be typed in by the client (spoofed).
+app.set('trust proxy', 3);
 
 // Serve index.html, styles.css and app.js from the public/ folder.
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/api/health', (req, res) => {
-  console.log('TEMP proxy debug', JSON.stringify({ ip: req.ip, xff: req.headers['x-forwarded-for'], remote: req.socket.remoteAddress }));
   res.json({ status: 'ok' });
 });
 
