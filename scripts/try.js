@@ -19,6 +19,12 @@ try {
     console.log(`\n${result.finalUrl}  ->  ${result.status.code} ${result.status.text}`);
     console.log(`Connected to ${result.connectedIp}  (resolved: ${result.addresses.join(', ')})\n`);
 
+    console.log('Redirect chain');
+    result.redirects.forEach((hop, i) => {
+      console.log(`  ${i + 1}. ${hop.status} ${hop.url}  (${hop.ms} ms)`);
+    });
+    console.log();
+
     console.log('Timings (ms)');
     console.log(`  DNS lookup     ${t.dns}${result.dnsSkipped ? '  (skipped: host is an IP)' : ''}`);
     console.log(`  TCP connect    ${t.tcp}`);

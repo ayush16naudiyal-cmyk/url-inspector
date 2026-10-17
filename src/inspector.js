@@ -120,13 +120,18 @@ function phaseAt(marks, isHttps) {
 
 // Steps 2-5: one HTTP(S) request to the IP from resolveHost, timing each phase.
 // It never follows redirects; it just reports the status and Location header.
-export function requestOnce(url, target) {
+// `signal` lets inspect() abort the request on timeout; `progress` lets it see
+// which phase we were in at that moment.
+export function requestOnce(url, target, { signal, progress = {} } = {}) {
   const isHttps = url.protocol === 'https:';
   const client = isHttps ? https : http;
   const marks = { start: now() };
+  progress.marks = marks;
+  progress.isHttps = isHttps;
 
   return new Promise((resolve, reject) => {
     const req = client.request({
+      signal, // when aborted, Node destroys the socket and the request errors
       hostname: target.host, // sent in the Host header
       port: url.port || (isHttps ? 443 : 80),
       path: url.pathname + url.search,
@@ -228,15 +233,113 @@ function networkError(err, phase) {
   return new InspectorError(message, { phase });
 }
 
-// Inspect a single URL: DNS, then one request. (Redirects come in phase 4.)
-export async function inspect(input) {
-  const url = normalizeUrl(input);
-  const target = await resolveHost(url);
-  const response = await requestOnce(url, target);
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 10;
+const TIMEOUT_MS = 10_000;
+
+const round1 = (n) => Math.round(n * 10) / 10;
+
+// Follow redirects by hand, one hop at a time. Doing it manually (instead of
+// an auto-follow option) lets us time every hop and re-run the SSRF check on
+// each new host: a public URL can redirect to http://127.0.0.1/.
+async function followRedirects(startUrl, { signal, progress }) {
+  const chain = [];
+  const visited = new Set();
+  let url = startUrl;
+
+  while (true) {
+    if (visited.has(url.href)) {
+      throw new InspectorError(`Redirect loop: ${url.href} appears twice in the chain.`, {
+        phase: 'redirect',
+      });
+    }
+    visited.add(url.href);
+
+    progress.marks = null; // back in the DNS phase for this hop
+    let target;
+    try {
+      target = await resolveHost(url); // SSRF check runs again for every hop
+    } catch (err) {
+      if (chain.length > 0) {
+        err.message = `${err.message.replace(/\.$/, '')}, reached by a redirect from ${chain.at(-1).url}.`;
+      }
+      throw err;
+    }
+    const response = await requestOnce(url, target, { signal, progress });
+    const hopMs = round1(target.dnsMs + response.timings.request);
+
+    chain.push({
+      url: url.href,
+      status: response.status.code,
+      statusText: response.status.text,
+      location: response.location,
+      ms: hopMs,
+    });
+
+    // Not a redirect (or a redirect with no Location): this is the final response.
+    if (!REDIRECT_CODES.has(response.status.code) || !response.location) {
+      return { chain, target, response, url };
+    }
+
+    if (chain.length > MAX_REDIRECTS) {
+      throw new InspectorError(`Too many redirects (more than ${MAX_REDIRECTS}).`, {
+        phase: 'redirect',
+      });
+    }
+
+    // Location can be relative ("/login"), so resolve it against the current URL.
+    let next;
+    try {
+      next = new URL(response.location, url);
+    } catch {
+      throw new InspectorError(`The server redirected to an invalid URL: ${response.location}`, {
+        phase: 'redirect',
+      });
+    }
+    if (next.protocol !== 'http:' && next.protocol !== 'https:') {
+      throw new InspectorError(`The server redirected to an unsupported URL: ${next.href}`, {
+        phase: 'redirect',
+      });
+    }
+    url = next;
+  }
+}
+
+// Inspect a URL: validate it, follow redirects, and describe the final response.
+// Timings, certificate, headers and the score are all for the FINAL response;
+// `redirects` lists every hop, including the final one.
+export async function inspect(input, { timeoutMs = TIMEOUT_MS } = {}) {
+  const startUrl = normalizeUrl(input);
+
+  // One deadline for the whole inspection, across every hop. Aborting the
+  // controller destroys whatever socket is open, so nothing is left hanging.
+  const controller = new AbortController();
+  const progress = { marks: null, isHttps: false };
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const phase = progress.marks ? phaseAt(progress.marks, progress.isHttps) : 'dns';
+      controller.abort();
+      reject(new InspectorError(`Timed out after ${timeoutMs / 1000} seconds.`, { phase }));
+    }, timeoutMs);
+  });
+
+  let result;
+  try {
+    result = await Promise.race([
+      followRedirects(startUrl, { signal: controller.signal, progress }),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const { chain, target, response, url } = result;
+  const isHttps = url.protocol === 'https:';
 
   return {
     input,
-    finalUrl: response.url,
+    finalUrl: url.href,
     addresses: target.addresses,
     connectedIp: response.connectedIp,
     dnsSkipped: target.dnsSkipped,
@@ -246,12 +349,13 @@ export async function inspect(input) {
       tls: response.timings.tls,
       ttfb: response.timings.ttfb,
       download: response.timings.download,
-      total: Math.round((target.dnsMs + response.timings.request) * 10) / 10,
+      total: round1(target.dnsMs + response.timings.request),
     },
     status: response.status,
+    redirects: chain,
     tls: response.tls,
     headers: response.headers,
-    security: scoreHeaders(response.headers, url.protocol === 'https:'),
+    security: scoreHeaders(response.headers, isHttps),
     body: response.body,
   };
 }
