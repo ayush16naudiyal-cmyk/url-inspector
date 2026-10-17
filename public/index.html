@@ -4,13 +4,81 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>URL Inspector</title>
+  <meta name="description" content="See what happens when a URL is requested: DNS, TCP, TLS and HTTP, with timings, certificate, redirects and security headers.">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main>
+  <header class="page-header">
     <h1>URL Inspector</h1>
-    <p>Setup works. The real page is built in phase 5.</p>
+    <p>See what happens when a URL is requested: DNS lookup, TCP connect, TLS handshake and the HTTP response.</p>
+  </header>
+
+  <main>
+    <form id="inspect-form" class="card" novalidate>
+      <label for="url-input">URL to inspect</label>
+      <div class="input-row">
+        <!-- type="text", not "url": the browser would reject "example.com" without https:// -->
+        <input id="url-input" name="url" type="text" inputmode="url" placeholder="example.com"
+               autocomplete="off" autocapitalize="off" spellcheck="false" required>
+        <button id="inspect-button" type="submit">Inspect</button>
+      </div>
+      <div class="examples">
+        <span>Try:</span>
+        <button type="button" class="example" data-url="github.com">github.com</button>
+        <button type="button" class="example" data-url="http://neverssl.com">http://neverssl.com</button>
+        <button type="button" class="example" data-url="example.com">example.com</button>
+      </div>
+    </form>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <div id="error" class="card error" role="alert" hidden></div>
+
+    <div id="results" hidden>
+      <section class="card">
+        <h2>Timing waterfall</h2>
+        <div id="waterfall" class="waterfall"></div>
+        <p id="waterfall-note" class="muted small"></p>
+      </section>
+
+      <section class="card">
+        <h2>Summary</h2>
+        <dl id="summary" class="details"></dl>
+      </section>
+
+      <section class="card">
+        <h2>Redirect chain</h2>
+        <ol id="redirects" class="redirects"></ol>
+        <p id="redirects-note" class="muted small"></p>
+      </section>
+
+      <section class="card">
+        <h2>Certificate</h2>
+        <div id="certificate"></div>
+      </section>
+
+      <section class="card">
+        <h2>Security headers</h2>
+        <div id="security"></div>
+      </section>
+
+      <section class="card">
+        <h2>Response headers</h2>
+        <div class="table-wrap">
+          <table id="headers-table">
+            <thead>
+              <tr><th scope="col">Name</th><th scope="col">Value</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </main>
+
+  <footer class="page-footer muted small">
+    Timings are measured from the server running this tool, not from your browser.
+  </footer>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
