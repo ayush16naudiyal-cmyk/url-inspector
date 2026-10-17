@@ -267,9 +267,12 @@ function setLoading(isLoading, url) {
 function showError(message, phase) {
   errorBox.replaceChildren(
     el('strong', { text: 'Inspection failed' }),
-    el('p', { text: message }),
-    phase ? el('p', { className: 'muted small', text: `Failed during: ${PHASE_NAMES[phase] || phase}` }) : null
+    el('p', { text: message })
   );
+  // Not every error has a phase (e.g. rate limiting), so only add the line when it does.
+  if (phase) {
+    errorBox.append(el('p', { className: 'muted small', text: `Failed during: ${PHASE_NAMES[phase] || phase}` }));
+  }
   errorBox.hidden = false;
 }
 
