@@ -19,6 +19,7 @@ app.set('trust proxy', 1);
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/api/health', (req, res) => {
+  console.log('TEMP proxy debug', JSON.stringify({ ip: req.ip, xff: req.headers['x-forwarded-for'], remote: req.socket.remoteAddress }));
   res.json({ status: 'ok' });
 });
 
