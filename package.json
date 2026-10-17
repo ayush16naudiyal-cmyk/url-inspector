@@ -1,0 +1,18 @@
+{
+  "name": "url-inspector",
+  "version": "1.0.0",
+  "description": "Shows what happens when a URL is requested: DNS, TCP, TLS, HTTP timings, certificate, redirects and security headers.",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.3"
+  }
+}
